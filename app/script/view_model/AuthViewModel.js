@@ -110,7 +110,7 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
     });
 
     this.registration_context = z.auth.AuthView.REGISTRATION_CONTEXT.EMAIL;
-    this.prefilled_email = '';
+    this.invite_info = undefined;
 
     this.code_digits = ko.observableArray([
       ko.observable(''),
@@ -433,7 +433,7 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
         this.name(invite_info.name);
         if (invite_info.email) {
           this.username(invite_info.email);
-          this.prefilled_email = invite_info.email;
+          this.invite_info = invite_info;
         }
       })
       .catch(function(error) {
@@ -548,7 +548,8 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
     if (!this.pending_server_request() && this.can_register() && this._validate_input(z.auth.AuthView.MODE.ACCOUNT_REGISTER)) {
       this.pending_server_request(true);
       this.persist(true);
-      const payload = this._create_payload(z.auth.AuthView.MODE.ACCOUNT_REGISTER);
+      const is_from_invite = this.invite_info && this.invite_info.email === this.username();
+      const payload = this._create_payload(z.auth.AuthView.MODE.ACCOUNT_REGISTER, is_from_invite);
 
       this.auth.repository.register(payload)
         .then(() => {
@@ -556,7 +557,7 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
           amplify.publish(z.event.WebApp.ANALYTICS.EVENT, z.tracking.EventName.REGISTRATION.ENTERED_CREDENTIALS, {outcome: 'success'});
 
           // Track if the user changed the pre-filled email
-          if (this.prefilled_email === this.username()) {
+          if (is_from_invite) {
             this.auth.repository.get_access_token()
               .then(() => this._account_verified());
           } else {
@@ -676,9 +677,10 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
    *
    * @private
    * @param {z.auth.AuthView.MODE} mode - View state of the authentication page
+   * @param {boolean} [from_invite=false] - Registering from invite
    * @returns {Object} Auth payload for specified mode
    */
-  _create_payload(mode) {
+  _create_payload(mode, from_invite = false) {
     let payload = {};
     const username = this.username()
       .trim()
@@ -721,6 +723,11 @@ z.ViewModel.AuthViewModel = class AuthViewModel {
           name: this.name().trim(),
           password: this.password(),
         };
+
+        if (from_invite) {
+          payload.invitation_code = this.invite_info.id;
+        }
+
         break;
       }
 
